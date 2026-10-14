@@ -24,6 +24,7 @@ async function testApp(t) {
   `);
   const pool = createPGlitePool(db);
   const app = await buildServer({ pool, logger: false, env: { NODE_ENV: 'test', PUBLIC_ORIGIN: origin } });
+  app.testDb = db;
   t.after(() => app.close());
   return app;
 }
@@ -181,6 +182,147 @@ test('account verification, session security, and tenant-scoped product workflow
   assert.equal(logout.statusCode, 200, logout.body);
   const afterLogout = await app.inject({ method: 'GET', url: '/api/auth/me', headers });
   assert.equal(afterLogout.statusCode, 401);
+});
+
+test('product import validates all rows, writes opening stock atomically, and replays safely', async (t) => {
+  const app = await testApp(t);
+  const owner = await registerAndLogin(app, {
+    email: 'product-import@example.com', displayName: 'Chủ cửa hàng', storeName: 'Cửa hàng nhập danh mục',
+  });
+  const storeId = owner.store.id;
+  const headers = {
+    cookie: cookieHeader(owner.cookies),
+    origin,
+    'x-csrf-token': owner.cookies.slink_csrf,
+  };
+  const items = [
+    {
+      sku: 'OPEN-001', barcode: '8930000000001', name: 'Hàng đầu kỳ có tồn',
+      salePriceVnd: 15000, costVnd: 9000, lowStockThreshold: '1.250', openingQuantity: '2.125',
+    },
+    {
+      sku: 'OPEN-002', barcode: '8930000000002', name: 'Hàng đầu kỳ chưa có tồn',
+      salePriceVnd: 25000, costVnd: 0, openingQuantity: '0',
+    },
+  ];
+  const importHeaders = { ...headers, 'idempotency-key': 'product-import-acceptance-001' };
+  const imported = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`, headers: importHeaders, payload: { items },
+  });
+  assert.equal(imported.statusCode, 201, imported.body);
+  assert.equal(imported.json().count, 2);
+  assert.equal(imported.json().products[0].sale_price_vnd, '15000');
+  assert.equal(imported.json().products[0].cost_vnd, '9000');
+  assert.equal(imported.json().products[0].on_hand, '2.125');
+
+  const catalog = await app.inject({ method: 'GET', url: `/api/stores/${storeId}/products`, headers });
+  assert.equal(catalog.statusCode, 200, catalog.body);
+  assert.equal(catalog.json().total, 2);
+  assert.equal(catalog.json().products.find((product) => product.sku === 'OPEN-001').on_hand, '2.125');
+
+  const replay = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`, headers: importHeaders, payload: { items },
+  });
+  assert.equal(replay.statusCode, 201, replay.body);
+  assert.equal(replay.headers['idempotent-replayed'], 'true');
+  assert.deepEqual(replay.json(), imported.json());
+
+  const changedPayload = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`, headers: importHeaders,
+    payload: { items: [{ ...items[0], salePriceVnd: 16000 }] },
+  });
+  assert.equal(changedPayload.statusCode, 409, changedPayload.body);
+  assert.equal(changedPayload.json().error.code, 'idempotency_conflict');
+
+  const invalidRows = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`,
+    headers: { ...headers, 'idempotency-key': 'product-import-invalid-rows-01' },
+    payload: { items: [
+      { sku: 'SHOULD-NOT-INSERT', name: 'Dòng hợp lệ', salePriceVnd: 100, costVnd: 50, openingQuantity: '3' },
+      { sku: 'INVALID-ROW', name: 'Dòng sai giá', salePriceVnd: -1, costVnd: 0, openingQuantity: '0' },
+    ] },
+  });
+  assert.equal(invalidRows.statusCode, 400, invalidRows.body);
+  const duplicateRows = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`,
+    headers: { ...headers, 'idempotency-key': 'product-import-duplicate-rows-01' },
+    payload: { items: [
+      { sku: 'DUP-001', name: 'Dòng trùng một', salePriceVnd: 100, costVnd: 0, openingQuantity: '0' },
+      { sku: 'dup-001', name: 'Dòng trùng hai', salePriceVnd: 100, costVnd: 0, openingQuantity: '0' },
+    ] },
+  });
+  assert.equal(duplicateRows.statusCode, 400, duplicateRows.body);
+  assert.equal(duplicateRows.json().error.code, 'duplicate_import_sku');
+
+  const existingDuplicate = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`,
+    headers: { ...headers, 'idempotency-key': 'product-import-existing-sku-01' },
+    payload: { items: [{ ...items[0], name: 'SKU đã tồn tại' }] },
+  });
+  assert.equal(existingDuplicate.statusCode, 409, existingDuplicate.body);
+  assert.equal(existingDuplicate.json().error.code, 'product_conflict');
+
+  const cashier = await inviteAndLogin(app, {
+    storeId,
+    ownerHeaders: headers,
+    email: 'product-import-cashier@example.com',
+    role: 'cashier',
+  });
+  const denied = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`,
+    headers: { ...cashier.headers, 'idempotency-key': 'product-import-cashier-deny-01' },
+    payload: { items: [{ sku: 'CASHIER-001', name: 'Không được nhập', salePriceVnd: 100, costVnd: 0, openingQuantity: '0' }] },
+  });
+  assert.equal(denied.statusCode, 403, denied.body);
+
+  const countsBeforeFailure = await app.testDb.query(
+    `SELECT
+       (SELECT count(*)::int FROM products WHERE store_id = $1) AS products,
+       (SELECT count(*)::int FROM inventory_balances WHERE store_id = $1) AS balances,
+       (SELECT count(*)::int FROM product_cost_history WHERE store_id = $1) AS costs,
+       (SELECT count(*)::int FROM inventory_movements WHERE store_id = $1) AS movements,
+       (SELECT count(*)::int FROM audit_events WHERE store_id = $1) AS audits,
+       (SELECT count(*)::int FROM idempotency_records WHERE store_id = $1) AS idempotency`,
+    [storeId]
+  );
+  await app.testDb.exec(`
+    CREATE FUNCTION fail_products_import_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF NEW.action = 'products.imported' THEN RAISE EXCEPTION 'injected products.imported audit failure'; END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER fail_products_import_audit BEFORE INSERT ON audit_events
+      FOR EACH ROW EXECUTE FUNCTION fail_products_import_audit();
+  `);
+  const failingImport = {
+    items: [{ sku: 'ROLLBACK-001', name: 'Danh mục phải rollback', salePriceVnd: 1200, costVnd: 700, openingQuantity: '4.100' }],
+  };
+  const rollbackHeaders = { ...headers, 'idempotency-key': 'product-import-audit-rollback-01' };
+  const failed = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`, headers: rollbackHeaders, payload: failingImport,
+  });
+  assert.equal(failed.statusCode, 500, failed.body);
+  const countsAfterFailure = await app.testDb.query(
+    `SELECT
+       (SELECT count(*)::int FROM products WHERE store_id = $1) AS products,
+       (SELECT count(*)::int FROM inventory_balances WHERE store_id = $1) AS balances,
+       (SELECT count(*)::int FROM product_cost_history WHERE store_id = $1) AS costs,
+       (SELECT count(*)::int FROM inventory_movements WHERE store_id = $1) AS movements,
+       (SELECT count(*)::int FROM audit_events WHERE store_id = $1) AS audits,
+       (SELECT count(*)::int FROM idempotency_records WHERE store_id = $1) AS idempotency`,
+    [storeId]
+  );
+  assert.deepEqual(countsAfterFailure.rows[0], countsBeforeFailure.rows[0]);
+  await app.testDb.exec('DROP TRIGGER fail_products_import_audit ON audit_events; DROP FUNCTION fail_products_import_audit();');
+
+  const retry = await app.inject({
+    method: 'POST', url: `/api/stores/${storeId}/products/import`, headers: rollbackHeaders, payload: failingImport,
+  });
+  assert.equal(retry.statusCode, 201, retry.body);
+  assert.equal(retry.json().products[0].on_hand, '4.1');
+  const finalCatalog = await app.inject({ method: 'GET', url: `/api/stores/${storeId}/products`, headers });
+  assert.equal(finalCatalog.json().total, 3);
 });
 
 test('cash outflow cannot exceed the drawer balance and a rejected request can be retried safely', async (t) => {
