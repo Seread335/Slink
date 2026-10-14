@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "Slink — Quản lý bán hàng",
+  "short_name": "Slink",
+  "description": "Quản lý bán hàng và cửa hàng mỗi ngày.",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f6f8f5",
+  "theme_color": "#123f35",
+  "icons": [
+    { "src": "./assets/slink-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/slink-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/slink-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "categories": ["business", "productivity"]
+}

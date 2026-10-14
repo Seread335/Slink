@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#123f35" />
+    <meta name="description" content="Slink — quản lý bán hàng gọn gàng, rõ ràng, ngay trên điện thoại." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Slink" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./assets/slink-icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/slink-icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/slink-icon-180.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>Slink — Quản lý bán hàng</title>
+  </head>
+  <body>
+    <main id="auth-screen" class="auth-screen" hidden></main>
+    <div class="app-shell" hidden>
+      <aside class="sidebar" id="sidebar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 8.5h16v5H13v2h11v8H8v-5h11v-2H8z" fill="currentColor"/><circle cx="24.5" cy="7.5" r="2.5" fill="#c8f36c"/></svg></span>
+          <span class="brand-name">slink<span class="brand-period">.</span></span>
+        </div>
+        <div class="store-switcher" id="store-switcher">
+          <span class="store-avatar">L</span>
+          <span class="store-meta"><strong id="sidebar-store-name">Linh Chi Store</strong><small>Cửa hàng của bạn</small></span>
+          <span class="switch-chevron">⌄</span>
+        </div>
+        <p class="nav-caption">VẬN HÀNH</p>
+        <nav class="primary-nav" id="primary-nav" aria-label="Điều hướng chính"></nav>
+        <div class="sidebar-bottom">
+          <div class="plan-card"><div class="plan-top"><span class="plan-dot"></span><span>Tài khoản cửa hàng</span><span class="plan-badge">Kết nối</span></div><p>Dữ liệu danh mục được lưu trên máy chủ Slink.</p><span class="plan-link">Bảo mật theo cửa hàng</span></div>
+          <button class="profile-button" data-action="logout" aria-label="Đăng xuất"><span class="profile-avatar">S</span><span><strong>Slink</strong><small>Đăng xuất</small></span><span class="profile-more">⇥</span></button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <button class="mobile-brand" data-route="dashboard" aria-label="Trang chủ"><span class="brand-mark"><svg viewBox="0 0 32 32"><path d="M8 8.5h16v5H13v2h11v8H8v-5h11v-2H8z" fill="currentColor"/><circle cx="24.5" cy="7.5" r="2.5" fill="#c8f36c"/></svg></span><span class="brand-name">slink<span class="brand-period">.</span></span></button>
+          <div class="topbar-left"><span class="crumb" id="crumb">Tổng quan</span><span class="crumb-separator">/</span><span class="crumb-current" id="crumb-current">Hôm nay</span></div>
+          <div class="topbar-right"><span class="connection-status" id="connection-status" role="status" aria-live="polite" aria-atomic="true"><i></i> Dữ liệu lưu trên máy chủ</span><button class="icon-button help-button" aria-label="Trợ giúp" data-action="help">?</button><button class="icon-button notification-button" aria-label="Thông báo" data-route="inventory"><span>♧</span><i class="notification-dot"></i></button><button class="topbar-avatar" data-action="logout" aria-label="Đăng xuất">S</button></div>
+        </header>
+        <div id="pending-compatibility-warning" class="auth-message error pending-compatibility-warning" role="alert" aria-live="assertive" hidden>
+          <span><strong>Cần đối soát thao tác cũ.</strong> Có bản chờ từ phiên bản trước chưa gắn với tài khoản. Hãy kiểm tra đơn hàng, công nợ, sổ quỹ và tồn kho trên máy chủ trước khi nhập lại.</span>
+          <button class="link-button" type="button" data-action="review-legacy-pending">Đã đối soát · xóa bản lưu cũ</button>
+        </div>
+        <section id="view" class="view" aria-live="polite"></section>
+      </main>
+      <nav class="mobile-nav" id="mobile-nav" aria-label="Điều hướng nhanh"></nav>
+    </div>
+    <div class="modal-backdrop" id="modal-backdrop" hidden></div>
+    <section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden></section>
+    <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+    <script src="./app.js" defer></script>
+    <script src="./register-sw.js" defer></script>
+  </body>
+</html>

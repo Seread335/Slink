@@ -1,0 +1,15 @@
+CREATE INDEX products_store_created_export_idx ON products (store_id, created_at, id);
+CREATE INDEX products_store_updated_export_idx ON products (store_id, updated_at, id);
+CREATE INDEX customers_store_created_export_idx ON customers (store_id, created_at, id);
+CREATE INDEX suppliers_store_created_export_idx ON suppliers (store_id, created_at, id);
+CREATE INDEX orders_store_occurred_export_idx ON orders (store_id, occurred_at, id);
+CREATE INDEX payments_store_occurred_export_idx ON payments (store_id, occurred_at, id);
+CREATE INDEX returns_store_occurred_export_idx ON returns (store_id, occurred_at, id);
+CREATE INDEX refunds_store_occurred_export_idx ON refunds (store_id, occurred_at, id);
+CREATE INDEX cash_movements_store_occurred_export_idx ON cash_movements (store_id, occurred_at, id);
+CREATE INDEX inventory_movements_store_occurred_export_idx ON inventory_movements (store_id, occurred_at, id);
+CREATE INDEX customer_ledger_store_occurred_export_idx ON customer_ledger_entries (store_id, occurred_at, id);
+CREATE INDEX supplier_ledger_store_occurred_export_idx ON supplier_ledger_entries (store_id, occurred_at, id);
+CREATE INDEX purchases_store_occurred_export_idx ON purchases (store_id, occurred_at, id);
+CREATE INDEX purchase_lines_store_purchase_export_idx ON purchase_lines (store_id, purchase_id, id);
+CREATE INDEX return_lines_store_return_export_idx ON return_lines (store_id, return_id, id);

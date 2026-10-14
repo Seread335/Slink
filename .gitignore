@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+var/
+.local-data/
+*.log
+coverage/
+*.db
+*.db-shm
+*.db-wal
