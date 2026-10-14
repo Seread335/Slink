@@ -38,7 +38,7 @@ Trợ lý vận hành cho cửa hàng bán lẻ nhỏ: bán nhanh, biết chính
 - Nhân viên kho xem tên nhà cung cấp và phiếu nhập để nhận hàng, nhưng không xem hồ sơ khách, đơn hàng, sổ quỹ, số dư phải trả, công nợ khách hoặc báo cáo tài chính.
 - Thu ngân không cần xem giá vốn để bán; giá vốn trong danh mục, tồn kho, giá trị tồn theo giá vốn và chi tiết đơn được giữ khỏi API trả về cho thu ngân.
 - Trang tài chính hiển thị người ghi nhận và ca liên quan cho từng dòng sổ quỹ; lịch sử ca gần đây kèm tiền đầu ca, thu/chi, số dự kiến, số đã đếm, chênh lệch và lý do. Mã VND trong sổ quỹ được định dạng từ chuỗi số nguyên để tránh làm tròn qua kiểu số thực của JavaScript.
-- Các thay đổi phân quyền trên giao diện và API hiện mới qua rà soát mã tĩnh; kiểm tra quyền từng vai trò bằng API và trình duyệt vẫn là cổng chưa đạt.
+- Ma trận API trên PGlite đã được nghiệm thu cho bốn vai trò: thu ngân chỉ xem ca hiện tại, không nhận số dư nhà cung cấp/công nợ/báo cáo, không thấy giá vốn và bị từ chối thao tác tài chính nhạy cảm; quản lý/kế toán xem đầy đủ dữ liệu tài chính; nhân viên kho xem tên nhà cung cấp và phiếu nhập nhưng không truy cập khách hàng, đơn hàng hay báo cáo tài chính. Giao diện theo từng vai trò, PostgreSQL thật và chạy đồng thời vẫn cần nghiệm thu.
 
 ## Nguyên tắc giao diện
 
