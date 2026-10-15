@@ -9,9 +9,14 @@
   },
   "scripts": {
     "start": "node server/index.js",
+    "start:native": "pnpm db:postgres:start && node server/index.js",
     "dev": "node server/dev.js",
     "dev:watch": "node --watch server/dev.js",
+    "db:postgres:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres-local.ps1 start",
+    "db:postgres:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres-local.ps1 stop",
+    "db:postgres:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres-local.ps1 status",
     "db:migrate": "node server/migrate.js",
+    "db:import:pglite": "node server/import-pglite-to-postgres.js",
     "test": "node --test"
   },
   "dependencies": {
