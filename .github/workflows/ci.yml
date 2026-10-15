@@ -17,7 +17,7 @@ concurrency:
 jobs:
   acceptance:
     name: API and schema acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out source
@@ -36,7 +36,7 @@ jobs:
   container:
     name: Production container build
     needs: acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out source
