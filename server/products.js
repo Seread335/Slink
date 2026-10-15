@@ -65,6 +65,9 @@ function validateImportRows(input) {
   const seenBarcodes = new Map();
   return input.map((row, index) => {
     const line = index + 2;
+    if (!row || typeof row !== 'object' || Array.isArray(row) || !Object.hasOwn(row, 'salePriceVnd')) {
+      throw new ApiError(400, 'validation_error', `Dòng ${line}: cần khai báo giá bán VND nguyên không âm.`);
+    }
     let product;
     try {
       product = validateProduct(row);
@@ -166,10 +169,14 @@ function registerProductRoutes(app, { pool, env }) {
         );
         if (existing.rowCount) {
           const conflictRow = existing.rows[0];
-          const conflictingValue = skuValues.includes(conflictRow.sku_normalized)
-            ? `SKU ${conflictRow.sku}`
-            : `mã vạch ${conflictRow.barcode}`;
-          throw new ApiError(409, 'product_conflict', `${conflictingValue} đã có trong cửa hàng. Không có dòng nào được nhập.`);
+          const skuIndex = products.findIndex((product) => product.sku.toLocaleLowerCase('vi') === conflictRow.sku_normalized);
+          const barcodeIndex = skuIndex < 0 && conflictRow.barcode
+            ? products.findIndex((product) => product.barcode === conflictRow.barcode)
+            : -1;
+          const conflictIndex = skuIndex >= 0 ? skuIndex : barcodeIndex;
+          const conflictingValue = skuIndex >= 0 ? `SKU ${conflictRow.sku}` : `mã vạch ${conflictRow.barcode}`;
+          const line = conflictIndex >= 0 ? `Dòng ${conflictIndex + 2}: ` : '';
+          throw new ApiError(409, 'product_conflict', `${line}${conflictingValue} đã có trong cửa hàng. Không có dòng nào được nhập.`);
         }
 
         const createdProducts = [];

@@ -97,6 +97,7 @@
   let customerRequestNumber = 0;
   let customerDetailRequestNumber = 0;
   let modalGeneration = 0;
+  let modalReturnFocus = null;
   let pickerCustomerRequestNumber = 0;
   let pickerCustomerSearchTimer = null;
   let orderTotal = 0;
@@ -1132,14 +1133,50 @@
   }
 
   function showModal(title, subtitle, body, footer, wide) {
+    if (modal.hidden) {
+      const active = document.activeElement;
+      modalReturnFocus = active && active !== document.body && !modal.contains(active) ? active : null;
+    }
     modalGeneration += 1;
     modal.className = 'modal' + (wide ? ' wide' : '');
-    modal.innerHTML = `<div class='modal-head'><div><h2 id='modal-title'>${esc(title)}</h2><p>${esc(subtitle || '')}</p></div><button class='modal-close' data-action='close-modal' aria-label='Đóng'>×</button></div><div class='modal-body'>${body || ''}</div>${footer ? `<div class='modal-footer'>${footer}</div>` : ''}`;
+    modal.innerHTML = `<div class='modal-head'><div><h2 id='modal-title'>${esc(title)}</h2><p id='modal-description'>${esc(subtitle || '')}</p></div><button class='modal-close' data-action='close-modal' aria-label='Đóng'>×</button></div><div class='modal-body'>${body || ''}</div>${footer ? `<div class='modal-footer'>${footer}</div>` : ''}`;
     modal.hidden = false; backdrop.hidden = false; document.body.style.overflow = 'hidden';
     const first = modal.querySelector('input:not([type=hidden]),select,button'); if (first) window.setTimeout(function () { first.focus(); }, 40);
   }
 
-  function closeModal() { modal.hidden = true; backdrop.hidden = true; document.body.style.overflow = ''; }
+  function closeModal() {
+    const wasOpen = !modal.hidden;
+    modal.hidden = true;
+    backdrop.hidden = true;
+    document.body.style.overflow = '';
+    if (!wasOpen) return;
+    const focusTarget = modalReturnFocus;
+    modalReturnFocus = null;
+    if (focusTarget && focusTarget.isConnected && !focusTarget.disabled) window.requestAnimationFrame(function () {
+      if (modal.hidden) focusTarget.focus();
+    });
+  }
+
+  function keepModalFocus(event) {
+    if (modal.hidden || event.key !== 'Tab') return;
+    const focusable = Array.from(modal.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+      .filter(function (element) { return !element.hidden && element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0; });
+    if (!focusable.length) {
+      event.preventDefault();
+      modal.setAttribute('tabindex', '-1');
+      modal.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function modalForm(title, subtitle, form, submitLabel, wide) {
     showModal(title, subtitle, form + `<div class='modal-note'>Các thay đổi sẽ được lưu vào dữ liệu cửa hàng trên máy chủ.</div>`, `<button class='btn btn-secondary' type='button' data-action='close-modal'>Hủy</button><button class='btn btn-primary' type='submit' form='entity-form'>${submitLabel || 'Lưu thông tin'}</button>`, wide);
@@ -2924,7 +2961,10 @@
   });
 
   backdrop.addEventListener('click', closeModal);
-  document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { closeModal(); const drawer = document.getElementById('drawer-cart'); if (drawer) drawer.classList.remove('open'); } });
+  document.addEventListener('keydown', function (event) {
+    keepModalFocus(event);
+    if (event.key === 'Escape') { closeModal(); const drawer = document.getElementById('drawer-cart'); if (drawer) drawer.classList.remove('open'); }
+  });
   document.addEventListener('click', function (event) { const drawer = document.getElementById('drawer-cart'); if (drawer && event.target === drawer) drawer.classList.remove('open'); });
   window.addEventListener('online', renderShell); window.addEventListener('offline', renderShell);
   boot();
