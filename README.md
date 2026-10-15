@@ -16,7 +16,7 @@ Các luồng này cần kiểm tra nghiệp vụ, dữ liệu và quyền truy c
 
 ## Chạy Slink trên máy phát triển
 
-Cần Node.js 24.22 trở lên và pnpm 11.25.0. Tệp `.nvmrc` ghim Node 24.22.0 cho máy phát triển, CI và ảnh triển khai. Chạy `pnpm install`, sau đó `pnpm dev` và mở `http://127.0.0.1:3000`. Lệnh này khởi động giao diện, API và PostgreSQL nhúng PGlite; không cần cài dịch vụ PostgreSQL riêng. Dữ liệu được lưu tại `.local-data/pglite`, tồn tại sau khi đóng và mở lại ứng dụng. Không có dữ liệu bán hàng mẫu được nạp vào tài khoản.
+Cần Node.js 24.11 trở lên và pnpm 11.25.0. Tệp `.nvmrc` ghim Node 24.22.0 làm phiên bản chuẩn cho CI và ảnh triển khai. Chạy `pnpm install`, sau đó `pnpm dev` và mở `http://127.0.0.1:3000`. Lệnh này khởi động giao diện, API và PostgreSQL nhúng PGlite; không cần cài dịch vụ PostgreSQL riêng. Dữ liệu được lưu tại `.local-data/pglite`, tồn tại sau khi đóng và mở lại ứng dụng. Không có dữ liệu bán hàng mẫu được nạp vào tài khoản.
 
 Tạo tài khoản trên trang đăng ký. Trong chế độ phát triển, API trả liên kết xác nhận email để mở trực tiếp; email thật chưa được gửi. Có thể đặt `PORT`, `HOST`, `PUBLIC_ORIGIN` hoặc `SLINK_LOCAL_DATA_DIR` trong `.env` để đổi cổng, địa chỉ nghe, địa chỉ truy cập hoặc nơi lưu database. Nếu truy cập từ điện thoại cùng mạng, đặt `HOST=0.0.0.0` và `PUBLIC_ORIGIN` thành địa chỉ LAN của máy chạy Slink; cần HTTPS để kiểm tra cài PWA đúng như môi trường thực tế.
 
