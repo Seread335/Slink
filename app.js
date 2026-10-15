@@ -887,7 +887,7 @@
     document.getElementById('crumb').textContent = meta[0];
     document.getElementById('crumb-current').textContent = meta[1];
     const online = navigator.onLine;
-    document.getElementById('connection-status').innerHTML = `<i style='${online ? '' : 'background:#d58b55;box-shadow:0 0 0 3px #f9efe2'}'></i>${online ? 'Dữ liệu lưu trên máy chủ' : 'Ngoại tuyến · chưa thể lưu'}`;
+    document.getElementById('connection-status').innerHTML = `<i style='${online ? '' : 'background:#d58b55;box-shadow:0 0 0 3px #f9efe2'}'></i>${online ? 'Có kết nối mạng' : 'Ngoại tuyến · chưa thể lưu'}`;
   }
 
   function pageHeading(title, subtitle, actions) {
