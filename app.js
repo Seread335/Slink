@@ -1212,12 +1212,19 @@
     let field = '';
     let quoted = false;
     let quoteClosed = false;
+    let physicalLine = 1;
+    let rowStartLine = 1;
     for (let index = 0; index < source.length; index += 1) {
       const character = source[index];
       if (quoted) {
         if (character === '"' && source[index + 1] === '"') { field += '"'; index += 1; }
         else if (character === '"') { quoted = false; quoteClosed = true; }
-        else field += character;
+        else {
+          field += character;
+          if (character === '\r' || character === '\n') {
+            if (character !== '\n' || source[index - 1] !== '\r') physicalLine += 1;
+          }
+        }
         continue;
       }
       if (character === '"') {
@@ -1227,13 +1234,15 @@
         row.push(field); field = ''; quoteClosed = false;
       } else if (character === '\n' || character === '\r') {
         if (character === '\r' && source[index + 1] === '\n') index += 1;
-        row.push(field); rows.push(row); row = []; field = ''; quoteClosed = false;
+        row.push(field); rows.push({ cells: row, line: rowStartLine }); row = []; field = ''; quoteClosed = false;
+        physicalLine += 1;
+        rowStartLine = physicalLine;
       } else if (quoteClosed) {
         if (!/\s/.test(character)) throw new Error('Có ký tự thừa sau trường CSV được đặt trong dấu ngoặc kép.');
       } else field += character;
     }
     if (quoted) throw new Error('Tệp CSV có trường chưa đóng dấu ngoặc kép.');
-    if (field.length || row.length || quoteClosed) { row.push(field); rows.push(row); }
+    if (field.length || row.length || quoteClosed) { row.push(field); rows.push({ cells: row, line: rowStartLine }); }
     return rows;
   }
 
@@ -1241,9 +1250,9 @@
     let parsed;
     try { parsed = parseCsvDocument(text); }
     catch (error) { return { items: [], errors: [error.message] }; }
-    const rows = parsed.filter(function (row, index) { return index === 0 || row.some(function (cell) { return String(cell || '').trim() !== ''; }); });
+    const rows = parsed.filter(function (record, index) { return index === 0 || record.cells.some(function (cell) { return String(cell || '').trim() !== ''; }); });
     if (!rows.length) return { items: [], errors: ['Tệp CSV đang trống.'] };
-    const headers = rows[0].map(function (cell) { return String(cell || '').trim(); });
+    const headers = rows[0].cells.map(function (cell) { return String(cell || '').trim(); });
     if (headers.length !== productImportHeaders.length || productImportHeaders.some(function (header, index) { return headers[index] !== header; })) {
       return { items: [], errors: ['Tiêu đề cột không đúng mẫu Slink. Hãy tải mẫu CSV rồi điền dữ liệu vào.'] };
     }
@@ -1254,8 +1263,9 @@
     const seenSkus = new Map();
     const seenBarcodes = new Map();
     const items = [];
-    dataRows.slice(0, 200).forEach(function (cells, index) {
-      const line = index + 2;
+    dataRows.slice(0, 200).forEach(function (record) {
+      const line = record.line;
+      const cells = record.cells;
       const rowErrors = [];
       if (cells.length !== productImportHeaders.length) rowErrors.push(`Dòng ${line}: số cột không khớp mẫu.`);
       const values = productImportHeaders.map(function (_header, cellIndex) { return String(cells[cellIndex] || '').trim(); });
@@ -1298,7 +1308,7 @@
       if (barcode && seenBarcodes.has(barcode)) rowErrors.push(`Dòng ${line}: mã vạch trùng với dòng ${seenBarcodes.get(barcode)} trong tệp.`);
       else if (barcode) seenBarcodes.set(barcode, line);
       if (rowErrors.length) errors.push(...rowErrors);
-      else items.push({ sku: sku, barcode: barcode, name: name, category: category, unit: unit, salePriceVnd: salePriceVnd, costVnd: costVnd, lowStockThreshold: lowStockThreshold, inventoryTracked: inventoryTracked, openingQuantity: openingQuantity });
+      else items.push({ sku: sku, barcode: barcode, name: name, category: category, unit: unit, salePriceVnd: salePriceVnd, costVnd: costVnd, lowStockThreshold: lowStockThreshold, inventoryTracked: inventoryTracked, openingQuantity: openingQuantity, sourceLine: line });
     });
     return { items: errors.length ? [] : items, errors: errors };
   }
