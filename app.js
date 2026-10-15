@@ -115,6 +115,8 @@
   let checkoutIdempotencyKey = '';
   let checkoutPendingPayload = null;
   let returnPending = null;
+  let productImportReadNumber = 0;
+  let productImportReading = false;
   let productImportRows = [];
   let productImportErrors = [];
   let pendingCompatibilityStoreId = '';
@@ -1305,16 +1307,19 @@
     const preview = modal.querySelector('#product-import-preview');
     const submit = modal.querySelector('button[type="submit"][form="entity-form"]');
     if (!preview) return;
-    if (productImportErrors.length) {
+    if (productImportReading) {
+      preview.innerHTML = `<div class='notice-item' role='status'><span>…</span><span><strong>Đang đọc tệp CSV</strong><small>Đợi Slink kiểm tra tệp trước khi gửi.</small></span></div>`;
+    } else if (productImportErrors.length) {
       preview.innerHTML = `<div class='auth-message error'><strong>Chưa thể nhập tệp.</strong><br/>${productImportErrors.slice(0, 8).map(esc).join('<br/>')}${productImportErrors.length > 8 ? `<br/>Còn ${productImportErrors.length - 8} lỗi khác.` : ''}</div>`;
     } else if (productImportRows.length) {
       preview.innerHTML = `<div class='notice-item'><span>✓</span><span><strong>${number(productImportRows.length)} sản phẩm sẵn sàng xem trước</strong><small>Tổng tồn đầu kỳ: ${totalImportQuantity(productImportRows)}. Cuộn trong bảng để rà soát toàn bộ; mọi dòng sẽ được ghi cùng nhau hoặc không dòng nào được ghi.</small></span></div><div class='table-wrap'><table class='data-table'><thead><tr><th>SKU</th><th>Sản phẩm</th><th class='text-right'>Giá bán</th><th class='text-right'>Tồn đầu kỳ</th></tr></thead><tbody>${productImportRows.map(function (item) { return `<tr><td>${esc(item.sku)}</td><td>${esc(item.name)}</td><td class='text-right'>${money(Number(item.salePriceVnd))}</td><td class='text-right'>${formatImportQuantity(item.openingQuantity)} ${esc(item.unit)}</td></tr>`; }).join('')}</tbody></table></div>`;
     } else preview.innerHTML = `<div class='empty-state'><strong>Chưa chọn tệp</strong><span>Tải mẫu CSV, điền danh mục rồi chọn tệp để kiểm tra trước khi gửi.</span></div>`;
-    if (submit) submit.disabled = productImportRows.length === 0 || productImportErrors.length > 0;
+    if (submit) submit.disabled = productImportReading || productImportRows.length === 0 || productImportErrors.length > 0;
   }
 
   function openProductImport() {
     const pending = loadPendingProductImport();
+    productImportReading = false;
     productImportRows = pending ? pending.payload.items : [];
     productImportErrors = [];
     const body = `<form id='entity-form' data-form='product-import'><div class='form-field full'><label class='input-label' for='product-import-file'>Chọn tệp danh mục CSV</label><input class='input' id='product-import-file' type='file' accept='.csv,text/csv' ${pending ? 'disabled' : ''}/></div><div class='modal-note'>Tối đa 200 sản phẩm mỗi lần. Giá bán và giá vốn nhập bằng VND nguyên, không dùng dấu phân cách hàng nghìn. Tồn đầu kỳ hỗ trợ tối đa 3 chữ số thập phân, dùng dấu chấm cho phần lẻ. SKU hoặc mã vạch trùng với dữ liệu cửa hàng sẽ làm hủy toàn bộ lần nhập.</div><button class='link-button' type='button' data-action='download-product-import-template'>Tải mẫu CSV</button><div id='product-import-preview' class='product-import-preview' aria-live='polite'></div></form>`;
@@ -2898,6 +2903,8 @@
   document.addEventListener('change', function (event) {
     if (event.target.matches('[data-tender-method]')) { updateCheckoutTenderSummary(event.target.form); return; }
     if (event.target.id === 'product-import-file') {
+      const readNumber = ++productImportReadNumber;
+      productImportReading = false;
       productImportRows = [];
       productImportErrors = [];
       const file = event.target.files && event.target.files[0];
@@ -2907,17 +2914,21 @@
         renderProductImportPreview();
         return;
       }
+      productImportReading = true;
+      renderProductImportPreview();
       const reader = new FileReader();
       const readGeneration = modalGeneration;
       reader.onload = function () {
-        if (readGeneration !== modalGeneration || modal.hidden) return;
+        if (readGeneration !== modalGeneration || readNumber !== productImportReadNumber || modal.hidden) return;
+        productImportReading = false;
         const parsed = parseProductImportCsv(String(reader.result || ''));
         productImportRows = parsed.items;
         productImportErrors = parsed.errors;
         renderProductImportPreview();
       };
       reader.onerror = function () {
-        if (readGeneration !== modalGeneration || modal.hidden) return;
+        if (readGeneration !== modalGeneration || readNumber !== productImportReadNumber || modal.hidden) return;
+        productImportReading = false;
         productImportErrors = ['Không đọc được tệp. Hãy chọn lại tệp CSV.'];
         renderProductImportPreview();
       };
