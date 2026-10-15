@@ -140,6 +140,13 @@
 
   function newIdempotencyKey() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      try {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        return 'slink-' + Array.from(bytes, function (value) { return value.toString(16).padStart(2, '0'); }).join('');
+      } catch (error) { /* Use the compatibility fallback when secure randomness is unavailable. */ }
+    }
     return 'slink-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   }
 
