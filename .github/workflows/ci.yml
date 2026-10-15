@@ -30,6 +30,9 @@ jobs:
           require-lockfile: true
           cache: true
 
+      - name: Check operations tooling syntax
+        run: node --check scripts/postgres-backup.js
+
       - name: Run acceptance suite
         run: pnpm test
 

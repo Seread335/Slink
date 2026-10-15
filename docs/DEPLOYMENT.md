@@ -20,6 +20,38 @@ Tài liệu này đóng gói đường chạy của ứng dụng thành containe
 
 Các giá trị bí mật phải được nhập từ secret manager của nơi triển khai; không tạo `.env` production trong repo hoặc đưa secret vào build argument, image, log hay workflow.
 
+## Sao lưu PostgreSQL và diễn tập phục hồi
+
+Slink có công cụ sao lưu logic mã hóa để tạo tệp phục hồi độc lập; công cụ này không thay thế snapshot/PITR do nhà cung cấp PostgreSQL quản lý. Production cần cả chính sách backup gốc của nhà cung cấp lẫn một bản sao mã hóa ở vùng lưu trữ riêng, có quyền truy cập hạn chế và lịch giữ bản do người vận hành chọn.
+
+### Tạo và xác minh bản sao
+
+- Chạy công cụ trong một job vận hành riêng có Node.js, dependency production và `pg_dump` tương thích với PostgreSQL đích. Image ứng dụng Slink không cài `pg_dump`; không chạy lịch backup bên trong web container.
+- Cấp `BACKUP_DATABASE_URL` từ secret manager cho một role riêng, không phải superuser, có quyền đọc mọi bảng và `BYPASSRLS`. Role cần quyền chỉ đọc; `row_security=off` khiến bản sao thất bại thay vì âm thầm bỏ sót hàng bị lọc bởi RLS.
+- Cấp `SLINK_BACKUP_ENCRYPTION_KEY` (khóa ngẫu nhiên 32 byte, base64) và `SLINK_BACKUP_KEY_ID` từ secret manager. Giữ các phiên bản khóa cũ trong thời gian các bản sao cần chúng còn hiệu lực; không lưu khóa trong kho chứa backup hoặc repo.
+- Đặt `SLINK_BACKUP_DIR` vào volume/object storage riêng đã mã hóa khi lưu và giới hạn quyền đọc. Mặc định cục bộ là `.local-data/backups`, đường dẫn này được Git bỏ qua nhưng vẫn chứa dữ liệu nhạy cảm.
+- Đặt `PG_DUMP_BIN` nếu `pg_dump` không có trong `PATH`, sau đó chạy `pnpm db:backup`. Lệnh tạo custom archive bằng cách mã hóa AES-256-GCM khi đang truyền dữ liệu, ký manifest bằng HMAC-SHA-256 và ghi SHA-256, rồi công bố tên tệp sau khi hoàn tất. Không có plaintext archive trung gian được ghi ra đĩa.
+- Xác minh mã hóa, chữ ký manifest và checksum bằng `pnpm db:backup:verify -- <đường-dẫn-manifest>`. Sao chép cả archive và manifest tới vùng lưu trữ riêng. Thông tin URL kết nối không nằm trong manifest hoặc dòng lệnh của `pg_dump`.
+
+Không coi một job exit code 0 là bằng chứng phục hồi. Trước khi phát hành, dựng một PostgreSQL đích tạm riêng và tạo database mới từ `template0` để tránh các đối tượng cài thêm trong `template1`; cấp quyền `CREATE` trên database đích cho role restore và tạo trước các role được ACL trong archive tham chiếu, tối thiểu `slink_app`. Dùng endpoint đã xác minh TLS cho đích từ xa; không đặt `APP_DATABASE_URL` làm biến backup/restore. Tài liệu PostgreSQL cũng khuyến nghị `template0` khi nạp archive vào database mới để đảm bảo database ban đầu trống ([pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html)).
+
+### Phục hồi có kiểm soát
+
+1. Chọn môi trường tách khỏi dữ liệu đang phục vụ và tạo database phục hồi mới từ `template0`; chuẩn bị sẵn các role được archive tham chiếu. Công cụ không tạo hoặc xóa database, không dùng `--clean`, kiểm tra database phải trống và nạp trong một transaction.
+2. Cấp đúng khóa theo `SLINK_BACKUP_KEY_ID`, đặt `RESTORE_DATABASE_URL`, `SLINK_RESTORE_CONFIRM_DATABASE` bằng chính xác tên database đích, `SLINK_RESTORE_ALLOW_EMPTY_TARGET=YES`; nếu đích từ xa, đặt thêm `SLINK_RESTORE_ALLOW_REMOTE=YES` sau khi xác nhận đó là môi trường phục hồi cô lập. `PG_RESTORE_BIN` có thể chỉ rõ `pg_restore`.
+3. Chạy `pnpm db:restore -- <đường-dẫn-manifest>`. Công cụ kiểm tra SHA-256 và thẻ xác thực GCM trước kết nối, từ chối PostgreSQL cũ hơn nguồn, từ chối đích có bảng/sequence/routine/schema/extension ứng dụng, và chỉ dùng `pg_restore --single-transaction --exit-on-error`.
+4. Sau restore, chạy migration release job với `MIGRATION_DATABASE_URL`, kiểm tra `/api/ready`, đăng nhập tài khoản diễn tập, đối soát số lượng bản ghi và các ledger tổng hợp với thời điểm backup, rồi ghi lại thời gian phục hồi và lượng dữ liệu mất tối đa theo chính sách đã duyệt. Chỉ một người vận hành mới được quyết định chuyển traffic.
+
+Các lệnh cần thiết:
+
+```text
+pnpm db:backup
+pnpm db:backup:verify -- <đường-dẫn-manifest>
+pnpm db:restore -- <đường-dẫn-manifest>
+```
+
+Không chạy restore vào database đang phục vụ. Chưa có endpoint sản xuất, secret manager, scheduler/retention, offsite storage hay đợt diễn tập restore nào được cấu hình trong workspace; các script/runbook này mới là phần chuẩn bị, không phải bằng chứng cổng phục hồi đã đạt.
+
 ## Tạo ảnh và chạy migration
 
 Tạo ảnh từ root của repo:
