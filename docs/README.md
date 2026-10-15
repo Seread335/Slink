@@ -9,7 +9,9 @@ Mục đích của thư mục này là giữ hướng sản phẩm, quyết đ�
 3. [`DELIVERY_ROADMAP.md`](DELIVERY_ROADMAP.md) — hiện trạng đã kiểm chứng, thiếu sót, ưu tiên kế tiếp và phụ thuộc bên ngoài.
 4. [`PRODUCT.md`](PRODUCT.md) — luồng nghiệp vụ, hành vi giao diện và nghiên cứu sản phẩm; bắt buộc trước khi đổi nghiệp vụ.
 5. [`BACKEND_SETUP.md`](BACKEND_SETUP.md) — cách chạy API, cơ sở dữ liệu và giới hạn triển khai.
-6. [`decisions/`](decisions/) — lý do của các quyết định kiến trúc đã ghi nhận.
+6. [`DEPLOYMENT.md`](DEPLOYMENT.md) — đóng gói container, chạy migration và các cổng vận hành production.
+7. [`COMMERCIAL_READINESS.md`](COMMERCIAL_READINESS.md) — trạng thái, tiêu chí chọn và phụ thuộc của tích hợp thương mại.
+8. [`decisions/`](decisions/) — lý do của các quyết định kiến trúc đã ghi nhận.
 
 ## Mỗi tài liệu tồn tại để làm gì
 
@@ -20,6 +22,8 @@ Mục đích của thư mục này là giữ hướng sản phẩm, quyết đ�
 | `PRODUCT.md` | Mô tả cách từng luồng phải hoạt động và nguyên tắc giao diện | Khi thêm/đổi luồng nghiệp vụ hoặc có nghiên cứu đáng tin làm đổi quyết định |
 | `DELIVERY_ROADMAP.md` | Nhật ký bằng chứng, trạng thái, rủi ro, ưu tiên và phụ thuộc | Sau mỗi thay đổi làm đổi hiện trạng; không nâng trạng thái nếu thiếu bằng chứng |
 | `BACKEND_SETUP.md` | Hướng dẫn thiết lập và ranh giới triển khai | Khi đổi runtime, cấu hình, migration, dịch vụ email hoặc cách triển khai |
+| `DEPLOYMENT.md` | Quy trình tạo ảnh, migration, health check, secret, backup và rollback | Khi chốt nhà cung cấp hoặc thay đổi release/operations |
+| `COMMERCIAL_READINESS.md` | Hiện trạng và phụ thuộc của nhà cung cấp thương mại | Khi lựa chọn hoặc nghiệm thu tích hợp, giá, hợp đồng hoặc cách hỗ trợ |
 | `decisions/*.md` | Lưu lựa chọn kiến trúc, căn cứ, đánh đổi và điều kiện xem xét lại | Khi một quyết định quan trọng được chốt hoặc cần thay thế |
 
 Tài liệu trong thư mục này hỗ trợ công việc; bằng chứng thực tế trong mã nguồn, môi trường chạy, thiết bị và hồ sơ nghiệm thu mới quyết định trạng thái.

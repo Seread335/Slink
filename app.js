@@ -861,7 +861,7 @@
   function navHtml(item, mobile) {
     const active = page === item.id || (item.id === 'products' && page === 'product-detail') || (item.id === 'orders' && page === 'order-detail');
     if (mobile) return `<button class='mobile-nav-link ${active ? 'active' : ''}' data-route='${item.id}' aria-label='${item.label}'><span class='nav-icon'>${icon(item.icon, 18)}</span><span>${item.id === 'dashboard' ? 'Tổng quan' : item.id === 'pos' ? 'Bán hàng' : item.id === 'orders' ? 'Đơn hàng' : 'Kho hàng'}</span></button>`;
-    return `<button class='nav-link ${active ? 'active' : ''}' data-route='${item.id}'><span class='nav-icon'>${icon(item.icon, 18)}</span><span class='nav-label'>${item.label}</span>${item.id === 'inventory' && lowStockProducts().length ? `<span class='nav-count'>${lowStockProducts().length}</span>` : ''}</button>`;
+    return `<button class='nav-link ${active ? 'active' : ''}' data-route='${item.id}' aria-label='${esc(item.label)}' title='${esc(item.label)}' ${active ? "aria-current='page'" : ''}><span class='nav-icon'>${icon(item.icon, 18)}</span><span class='nav-label'>${esc(item.label)}</span>${item.id === 'inventory' && lowStockProducts().length ? `<span class='nav-count'>${lowStockProducts().length}</span>` : ''}</button>`;
   }
 
   function canAccessRoute(route) {
