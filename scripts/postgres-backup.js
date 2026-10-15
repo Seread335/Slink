@@ -131,6 +131,10 @@ function collectStderr(stream) {
   return () => result.trim();
 }
 
+function reportWarnings(command, details) {
+  if (details) process.stderr.write(`${path.basename(command)} warnings:\n${details}\n`);
+}
+
 function encryptTransform(key, nonce) {
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
   return new Transform({
@@ -309,6 +313,7 @@ async function createBackup() {
       await Promise.allSettled([stream, outcome]);
       throw error;
     }
+    reportWarnings(pgDump, stderr());
 
     const archiveInfo = await hashFile(partialPath);
     await fs.rename(partialPath, archivePath);
@@ -355,8 +360,12 @@ async function validateRestoreTarget(connection, manifest) {
   try {
     const state = await pool.query(
       `SELECT current_database() AS database_name,
+              current_user AS restore_role,
+              EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = current_user AND rolsuper) AS restore_superuser,
               current_setting('server_version_num')::integer AS server_version_num,
               has_database_privilege(current_user, current_database(), 'CREATE') AS can_create_schema,
+              to_regnamespace('public') IS NOT NULL AS has_public_schema,
+              COALESCE(has_schema_privilege(current_user, 'public', 'CREATE'), false) AS can_create_public,
               EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'slink_app') AS has_app_role,
               (SELECT count(*) FROM pg_catalog.pg_class c
                  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -393,7 +402,11 @@ async function validateRestoreTarget(connection, manifest) {
     );
     const target = state.rows[0];
     if (target.database_name !== connection.databaseName) fail('Connected database name does not match the target URL.');
+    if (target.restore_role !== 'slink_migrator' || target.restore_superuser) {
+      fail('Use the non-superuser slink_migrator role for restore so restored objects remain owned by the migration role.');
+    }
     if (!target.can_create_schema) fail('The restore role needs CREATE privilege on the target database so it can restore the archived schema.');
+    if (target.has_public_schema && !target.can_create_public) fail('The restore role needs CREATE privilege on the existing public schema.');
     if (!target.has_app_role) fail('Create the slink_app role on the target cluster before restoring ACL grants.');
     if (target.relation_count || target.routine_count || target.type_count || target.operator_count
       || target.collation_count || target.custom_schema_count || target.extension_count) {
@@ -421,7 +434,6 @@ async function restoreBackup(manifestPath) {
     '--single-transaction',
     '--no-owner',
     `--dbname=${connection.databaseName}`,
-    '-',
   ], { env, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
   const stderr = collectStderr(child.stderr);
   const outcome = processOutcome(child, pgRestore, stderr);
@@ -437,6 +449,7 @@ async function restoreBackup(manifestPath) {
     await Promise.allSettled([stream, outcome]);
     throw error;
   }
+  reportWarnings(pgRestore, stderr());
   process.stdout.write(`Backup restored into empty database '${connection.databaseName}'.\n`);
   process.stdout.write('Run the migration release step, verify /api/ready, and perform the documented recovery checks before routing traffic.\n');
 }
