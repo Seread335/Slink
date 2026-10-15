@@ -16,6 +16,9 @@
     "db:postgres:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres-local.ps1 stop",
     "db:postgres:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres-local.ps1 status",
     "db:migrate": "node server/migrate.js",
+    "db:backup": "node scripts/postgres-backup.js create",
+    "db:backup:verify": "node scripts/postgres-backup.js verify",
+    "db:restore": "node scripts/postgres-backup.js restore",
     "db:import:pglite": "node server/import-pglite-to-postgres.js",
     "test": "node --test"
   },

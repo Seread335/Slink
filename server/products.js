@@ -64,7 +64,12 @@ function validateImportRows(input) {
   const seenSkus = new Map();
   const seenBarcodes = new Map();
   return input.map((row, index) => {
-    const line = index + 2;
+    const line = Number.isSafeInteger(row?.sourceLine) && row.sourceLine >= 2 && row.sourceLine <= 1_000_000
+      ? row.sourceLine
+      : index + 2;
+    if (!row || typeof row !== 'object' || Array.isArray(row) || !Object.hasOwn(row, 'salePriceVnd')) {
+      throw new ApiError(400, 'validation_error', `Dòng ${line}: cần khai báo giá bán VND nguyên không âm.`);
+    }
     let product;
     try {
       product = validateProduct(row);
@@ -90,8 +95,21 @@ function validateImportRows(input) {
     const wholeQuantity = quantityMatch[1].replace(/^0+(?=\d)/, '');
     const fractionQuantity = (quantityMatch[2] || '').replace(/0+$/, '');
     const openingQuantityText = wholeQuantity + (fractionQuantity ? `.${fractionQuantity}` : '');
-    return { ...product, openingQuantity, openingQuantityText };
+    return { ...product, openingQuantity, openingQuantityText, sourceLine: line };
   });
+}
+
+function describeImportConflict(products, existingRows) {
+  if (!existingRows.length) return null;
+  const skuConflicts = new Map(existingRows.map((product) => [product.sku_normalized, product.sku]));
+  const barcodeConflicts = new Set(existingRows.map((product) => product.barcode).filter(Boolean));
+  const conflictProduct = products.find((product) => skuConflicts.has(product.sku.toLocaleLowerCase('vi')) || (product.barcode && barcodeConflicts.has(product.barcode)));
+  if (!conflictProduct) return null;
+  const normalizedSku = conflictProduct.sku.toLocaleLowerCase('vi');
+  const conflictingValue = skuConflicts.has(normalizedSku)
+    ? `SKU ${skuConflicts.get(normalizedSku)}`
+    : `mã vạch ${conflictProduct.barcode}`;
+  return `Dòng ${conflictProduct.sourceLine}: ${conflictingValue} đã có trong cửa hàng. Không có dòng nào được nhập.`;
 }
 
 function registerProductRoutes(app, { pool, env }) {
@@ -136,6 +154,8 @@ function registerProductRoutes(app, { pool, env }) {
     const products = validateImportRows(request.body?.items);
     const requestHash = createHash('sha256').update(JSON.stringify(products)).digest();
     const importId = randomUUID();
+    const skuValues = products.map((product) => product.sku.toLocaleLowerCase('vi'));
+    const barcodeValues = products.map((product) => product.barcode).filter(Boolean);
     try {
       const outcome = await withStore(pool, auth.userId, storeId, async (client, membership) => {
         requireEditor(membership.role);
@@ -156,21 +176,13 @@ function registerProductRoutes(app, { pool, env }) {
           return { status: record.response_status, body: record.response_body, replayed: true };
         }
 
-        const skuValues = products.map((product) => product.sku.toLocaleLowerCase('vi'));
-        const barcodeValues = products.map((product) => product.barcode).filter(Boolean);
         const existing = await client.query(
           `SELECT sku, sku_normalized, barcode FROM products
-           WHERE store_id = $1 AND (sku_normalized = ANY($2::text[]) OR barcode = ANY($3::text[]))
-           LIMIT 1`,
+           WHERE store_id = $1 AND (sku_normalized = ANY($2::text[]) OR barcode = ANY($3::text[]))`,
           [storeId, skuValues, barcodeValues]
         );
-        if (existing.rowCount) {
-          const conflictRow = existing.rows[0];
-          const conflictingValue = skuValues.includes(conflictRow.sku_normalized)
-            ? `SKU ${conflictRow.sku}`
-            : `mã vạch ${conflictRow.barcode}`;
-          throw new ApiError(409, 'product_conflict', `${conflictingValue} đã có trong cửa hàng. Không có dòng nào được nhập.`);
-        }
+        const conflictMessage = describeImportConflict(products, existing.rows);
+        if (conflictMessage) throw new ApiError(409, 'product_conflict', conflictMessage);
 
         const createdProducts = [];
         for (const product of products) {
@@ -230,6 +242,18 @@ function registerProductRoutes(app, { pool, env }) {
       if (outcome.replayed) reply.header('idempotent-replayed', 'true');
       return reply.code(outcome.status).send(outcome.body);
     } catch (error) {
+      if (error.code === '23505') {
+        const conflictMessage = await withStore(pool, auth.userId, storeId, async (client, membership) => {
+          requireEditor(membership.role);
+          const existing = await client.query(
+            `SELECT sku, sku_normalized, barcode FROM products
+             WHERE store_id = $1 AND (sku_normalized = ANY($2::text[]) OR barcode = ANY($3::text[]))`,
+            [storeId, skuValues, barcodeValues]
+          );
+          return describeImportConflict(products, existing.rows);
+        });
+        if (conflictMessage) throw new ApiError(409, 'product_conflict', conflictMessage);
+      }
       return conflict(error);
     }
   });

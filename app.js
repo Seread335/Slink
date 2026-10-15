@@ -97,6 +97,7 @@
   let customerRequestNumber = 0;
   let customerDetailRequestNumber = 0;
   let modalGeneration = 0;
+  let modalReturnFocus = null;
   let pickerCustomerRequestNumber = 0;
   let pickerCustomerSearchTimer = null;
   let orderTotal = 0;
@@ -114,6 +115,8 @@
   let checkoutIdempotencyKey = '';
   let checkoutPendingPayload = null;
   let returnPending = null;
+  let productImportReadNumber = 0;
+  let productImportReading = false;
   let productImportRows = [];
   let productImportErrors = [];
   let pendingCompatibilityStoreId = '';
@@ -137,6 +140,13 @@
 
   function newIdempotencyKey() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      try {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        return 'slink-' + Array.from(bytes, function (value) { return value.toString(16).padStart(2, '0'); }).join('');
+      } catch (error) { /* Use the compatibility fallback when secure randomness is unavailable. */ }
+    }
     return 'slink-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   }
 
@@ -851,7 +861,7 @@
   function navHtml(item, mobile) {
     const active = page === item.id || (item.id === 'products' && page === 'product-detail') || (item.id === 'orders' && page === 'order-detail');
     if (mobile) return `<button class='mobile-nav-link ${active ? 'active' : ''}' data-route='${item.id}' aria-label='${item.label}'><span class='nav-icon'>${icon(item.icon, 18)}</span><span>${item.id === 'dashboard' ? 'Tổng quan' : item.id === 'pos' ? 'Bán hàng' : item.id === 'orders' ? 'Đơn hàng' : 'Kho hàng'}</span></button>`;
-    return `<button class='nav-link ${active ? 'active' : ''}' data-route='${item.id}'><span class='nav-icon'>${icon(item.icon, 18)}</span><span class='nav-label'>${item.label}</span>${item.id === 'inventory' && lowStockProducts().length ? `<span class='nav-count'>${lowStockProducts().length}</span>` : ''}</button>`;
+    return `<button class='nav-link ${active ? 'active' : ''}' data-route='${item.id}' aria-label='${esc(item.label)}' title='${esc(item.label)}' ${active ? "aria-current='page'" : ''}><span class='nav-icon'>${icon(item.icon, 18)}</span><span class='nav-label'>${esc(item.label)}</span>${item.id === 'inventory' && lowStockProducts().length ? `<span class='nav-count'>${lowStockProducts().length}</span>` : ''}</button>`;
   }
 
   function canAccessRoute(route) {
@@ -884,7 +894,7 @@
     document.getElementById('crumb').textContent = meta[0];
     document.getElementById('crumb-current').textContent = meta[1];
     const online = navigator.onLine;
-    document.getElementById('connection-status').innerHTML = `<i style='${online ? '' : 'background:#d58b55;box-shadow:0 0 0 3px #f9efe2'}'></i>${online ? 'Dữ liệu lưu trên máy chủ' : 'Ngoại tuyến · chưa thể lưu'}`;
+    document.getElementById('connection-status').innerHTML = `<i style='${online ? '' : 'background:#d58b55;box-shadow:0 0 0 3px #f9efe2'}'></i>${online ? 'Có kết nối mạng' : 'Ngoại tuyến · chưa thể lưu'}`;
   }
 
   function pageHeading(title, subtitle, actions) {
@@ -1132,14 +1142,50 @@
   }
 
   function showModal(title, subtitle, body, footer, wide) {
+    if (modal.hidden) {
+      const active = document.activeElement;
+      modalReturnFocus = active && active !== document.body && !modal.contains(active) ? active : null;
+    }
     modalGeneration += 1;
     modal.className = 'modal' + (wide ? ' wide' : '');
-    modal.innerHTML = `<div class='modal-head'><div><h2 id='modal-title'>${esc(title)}</h2><p>${esc(subtitle || '')}</p></div><button class='modal-close' data-action='close-modal' aria-label='Đóng'>×</button></div><div class='modal-body'>${body || ''}</div>${footer ? `<div class='modal-footer'>${footer}</div>` : ''}`;
+    modal.innerHTML = `<div class='modal-head'><div><h2 id='modal-title'>${esc(title)}</h2><p id='modal-description'>${esc(subtitle || '')}</p></div><button class='modal-close' data-action='close-modal' aria-label='Đóng'>×</button></div><div class='modal-body'>${body || ''}</div>${footer ? `<div class='modal-footer'>${footer}</div>` : ''}`;
     modal.hidden = false; backdrop.hidden = false; document.body.style.overflow = 'hidden';
     const first = modal.querySelector('input:not([type=hidden]),select,button'); if (first) window.setTimeout(function () { first.focus(); }, 40);
   }
 
-  function closeModal() { modal.hidden = true; backdrop.hidden = true; document.body.style.overflow = ''; }
+  function closeModal() {
+    const wasOpen = !modal.hidden;
+    modal.hidden = true;
+    backdrop.hidden = true;
+    document.body.style.overflow = '';
+    if (!wasOpen) return;
+    const focusTarget = modalReturnFocus;
+    modalReturnFocus = null;
+    if (focusTarget && focusTarget.isConnected && !focusTarget.disabled) window.requestAnimationFrame(function () {
+      if (modal.hidden) focusTarget.focus();
+    });
+  }
+
+  function keepModalFocus(event) {
+    if (modal.hidden || event.key !== 'Tab') return;
+    const focusable = Array.from(modal.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+      .filter(function (element) { return !element.hidden && element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0; });
+    if (!focusable.length) {
+      event.preventDefault();
+      modal.setAttribute('tabindex', '-1');
+      modal.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function modalForm(title, subtitle, form, submitLabel, wide) {
     showModal(title, subtitle, form + `<div class='modal-note'>Các thay đổi sẽ được lưu vào dữ liệu cửa hàng trên máy chủ.</div>`, `<button class='btn btn-secondary' type='button' data-action='close-modal'>Hủy</button><button class='btn btn-primary' type='submit' form='entity-form'>${submitLabel || 'Lưu thông tin'}</button>`, wide);
@@ -1173,12 +1219,19 @@
     let field = '';
     let quoted = false;
     let quoteClosed = false;
+    let physicalLine = 1;
+    let rowStartLine = 1;
     for (let index = 0; index < source.length; index += 1) {
       const character = source[index];
       if (quoted) {
         if (character === '"' && source[index + 1] === '"') { field += '"'; index += 1; }
         else if (character === '"') { quoted = false; quoteClosed = true; }
-        else field += character;
+        else {
+          field += character;
+          if (character === '\r' || character === '\n') {
+            if (character !== '\n' || source[index - 1] !== '\r') physicalLine += 1;
+          }
+        }
         continue;
       }
       if (character === '"') {
@@ -1188,13 +1241,15 @@
         row.push(field); field = ''; quoteClosed = false;
       } else if (character === '\n' || character === '\r') {
         if (character === '\r' && source[index + 1] === '\n') index += 1;
-        row.push(field); rows.push(row); row = []; field = ''; quoteClosed = false;
+        row.push(field); rows.push({ cells: row, line: rowStartLine }); row = []; field = ''; quoteClosed = false;
+        physicalLine += 1;
+        rowStartLine = physicalLine;
       } else if (quoteClosed) {
         if (!/\s/.test(character)) throw new Error('Có ký tự thừa sau trường CSV được đặt trong dấu ngoặc kép.');
       } else field += character;
     }
     if (quoted) throw new Error('Tệp CSV có trường chưa đóng dấu ngoặc kép.');
-    if (field.length || row.length || quoteClosed) { row.push(field); rows.push(row); }
+    if (field.length || row.length || quoteClosed) { row.push(field); rows.push({ cells: row, line: rowStartLine }); }
     return rows;
   }
 
@@ -1202,9 +1257,9 @@
     let parsed;
     try { parsed = parseCsvDocument(text); }
     catch (error) { return { items: [], errors: [error.message] }; }
-    const rows = parsed.filter(function (row, index) { return index === 0 || row.some(function (cell) { return String(cell || '').trim() !== ''; }); });
+    const rows = parsed.filter(function (record, index) { return index === 0 || record.cells.some(function (cell) { return String(cell || '').trim() !== ''; }); });
     if (!rows.length) return { items: [], errors: ['Tệp CSV đang trống.'] };
-    const headers = rows[0].map(function (cell) { return String(cell || '').trim(); });
+    const headers = rows[0].cells.map(function (cell) { return String(cell || '').trim(); });
     if (headers.length !== productImportHeaders.length || productImportHeaders.some(function (header, index) { return headers[index] !== header; })) {
       return { items: [], errors: ['Tiêu đề cột không đúng mẫu Slink. Hãy tải mẫu CSV rồi điền dữ liệu vào.'] };
     }
@@ -1215,8 +1270,9 @@
     const seenSkus = new Map();
     const seenBarcodes = new Map();
     const items = [];
-    dataRows.slice(0, 200).forEach(function (cells, index) {
-      const line = index + 2;
+    dataRows.slice(0, 200).forEach(function (record) {
+      const line = record.line;
+      const cells = record.cells;
       const rowErrors = [];
       if (cells.length !== productImportHeaders.length) rowErrors.push(`Dòng ${line}: số cột không khớp mẫu.`);
       const values = productImportHeaders.map(function (_header, cellIndex) { return String(cells[cellIndex] || '').trim(); });
@@ -1259,7 +1315,7 @@
       if (barcode && seenBarcodes.has(barcode)) rowErrors.push(`Dòng ${line}: mã vạch trùng với dòng ${seenBarcodes.get(barcode)} trong tệp.`);
       else if (barcode) seenBarcodes.set(barcode, line);
       if (rowErrors.length) errors.push(...rowErrors);
-      else items.push({ sku: sku, barcode: barcode, name: name, category: category, unit: unit, salePriceVnd: salePriceVnd, costVnd: costVnd, lowStockThreshold: lowStockThreshold, inventoryTracked: inventoryTracked, openingQuantity: openingQuantity });
+      else items.push({ sku: sku, barcode: barcode, name: name, category: category, unit: unit, salePriceVnd: salePriceVnd, costVnd: costVnd, lowStockThreshold: lowStockThreshold, inventoryTracked: inventoryTracked, openingQuantity: openingQuantity, sourceLine: line });
     });
     return { items: errors.length ? [] : items, errors: errors };
   }
@@ -1268,16 +1324,19 @@
     const preview = modal.querySelector('#product-import-preview');
     const submit = modal.querySelector('button[type="submit"][form="entity-form"]');
     if (!preview) return;
-    if (productImportErrors.length) {
+    if (productImportReading) {
+      preview.innerHTML = `<div class='notice-item' role='status'><span>…</span><span><strong>Đang đọc tệp CSV</strong><small>Đợi Slink kiểm tra tệp trước khi gửi.</small></span></div>`;
+    } else if (productImportErrors.length) {
       preview.innerHTML = `<div class='auth-message error'><strong>Chưa thể nhập tệp.</strong><br/>${productImportErrors.slice(0, 8).map(esc).join('<br/>')}${productImportErrors.length > 8 ? `<br/>Còn ${productImportErrors.length - 8} lỗi khác.` : ''}</div>`;
     } else if (productImportRows.length) {
-      preview.innerHTML = `<div class='notice-item'><span>✓</span><span><strong>${number(productImportRows.length)} sản phẩm sẵn sàng xem trước</strong><small>Tổng tồn đầu kỳ: ${totalImportQuantity(productImportRows)}. Mọi dòng sẽ được ghi cùng nhau hoặc không dòng nào được ghi.</small></span></div><div class='table-wrap'><table class='data-table'><thead><tr><th>SKU</th><th>Sản phẩm</th><th class='text-right'>Giá bán</th><th class='text-right'>Tồn đầu kỳ</th></tr></thead><tbody>${productImportRows.slice(0, 5).map(function (item) { return `<tr><td>${esc(item.sku)}</td><td>${esc(item.name)}</td><td class='text-right'>${money(Number(item.salePriceVnd))}</td><td class='text-right'>${formatImportQuantity(item.openingQuantity)} ${esc(item.unit)}</td></tr>`; }).join('')}</tbody></table></div>${productImportRows.length > 5 ? `<small>Đang xem 5 trong ${number(productImportRows.length)} dòng.</small>` : ''}`;
+      preview.innerHTML = `<div class='notice-item'><span>✓</span><span><strong>${number(productImportRows.length)} sản phẩm sẵn sàng xem trước</strong><small>Tổng tồn đầu kỳ: ${totalImportQuantity(productImportRows)}. Cuộn trong bảng để rà soát toàn bộ; mọi dòng sẽ được ghi cùng nhau hoặc không dòng nào được ghi.</small></span></div><div class='table-wrap'><table class='data-table'><thead><tr><th>SKU / mã vạch</th><th>Sản phẩm</th><th class='text-right'>Giá bán / giá vốn</th><th class='text-right'>Tồn đầu kỳ / ngưỡng</th><th>Theo dõi tồn</th></tr></thead><tbody>${productImportRows.map(function (item) { return `<tr><td><span class='product-name-stack'><strong>${esc(item.sku)}</strong><small>Mã vạch: ${esc(item.barcode || 'Không có')}</small></span></td><td><span class='product-name-stack'><strong>${esc(item.name)}</strong><small>${esc(item.category)} · ${esc(item.unit)}</small></span></td><td class='text-right'><span class='product-name-stack'><strong>${money(Number(item.salePriceVnd))}</strong><small>Giá vốn ${money(Number(item.costVnd))}</small></span></td><td class='text-right'><span class='product-name-stack'><strong>${formatImportQuantity(item.openingQuantity)} ${esc(item.unit)}</strong><small>Nhắc khi còn ${formatImportQuantity(item.lowStockThreshold)}</small></span></td><td>${item.inventoryTracked ? 'Có' : 'Không'}</td></tr>`; }).join('')}</tbody></table></div>`;
     } else preview.innerHTML = `<div class='empty-state'><strong>Chưa chọn tệp</strong><span>Tải mẫu CSV, điền danh mục rồi chọn tệp để kiểm tra trước khi gửi.</span></div>`;
-    if (submit) submit.disabled = productImportRows.length === 0 || productImportErrors.length > 0;
+    if (submit) submit.disabled = productImportReading || productImportRows.length === 0 || productImportErrors.length > 0;
   }
 
   function openProductImport() {
     const pending = loadPendingProductImport();
+    productImportReading = false;
     productImportRows = pending ? pending.payload.items : [];
     productImportErrors = [];
     const body = `<form id='entity-form' data-form='product-import'><div class='form-field full'><label class='input-label' for='product-import-file'>Chọn tệp danh mục CSV</label><input class='input' id='product-import-file' type='file' accept='.csv,text/csv' ${pending ? 'disabled' : ''}/></div><div class='modal-note'>Tối đa 200 sản phẩm mỗi lần. Giá bán và giá vốn nhập bằng VND nguyên, không dùng dấu phân cách hàng nghìn. Tồn đầu kỳ hỗ trợ tối đa 3 chữ số thập phân, dùng dấu chấm cho phần lẻ. SKU hoặc mã vạch trùng với dữ liệu cửa hàng sẽ làm hủy toàn bộ lần nhập.</div><button class='link-button' type='button' data-action='download-product-import-template'>Tải mẫu CSV</button><div id='product-import-preview' class='product-import-preview' aria-live='polite'></div></form>`;
@@ -2861,6 +2920,8 @@
   document.addEventListener('change', function (event) {
     if (event.target.matches('[data-tender-method]')) { updateCheckoutTenderSummary(event.target.form); return; }
     if (event.target.id === 'product-import-file') {
+      const readNumber = ++productImportReadNumber;
+      productImportReading = false;
       productImportRows = [];
       productImportErrors = [];
       const file = event.target.files && event.target.files[0];
@@ -2870,17 +2931,21 @@
         renderProductImportPreview();
         return;
       }
+      productImportReading = true;
+      renderProductImportPreview();
       const reader = new FileReader();
       const readGeneration = modalGeneration;
       reader.onload = function () {
-        if (readGeneration !== modalGeneration || modal.hidden) return;
+        if (readGeneration !== modalGeneration || readNumber !== productImportReadNumber || modal.hidden) return;
+        productImportReading = false;
         const parsed = parseProductImportCsv(String(reader.result || ''));
         productImportRows = parsed.items;
         productImportErrors = parsed.errors;
         renderProductImportPreview();
       };
       reader.onerror = function () {
-        if (readGeneration !== modalGeneration || modal.hidden) return;
+        if (readGeneration !== modalGeneration || readNumber !== productImportReadNumber || modal.hidden) return;
+        productImportReading = false;
         productImportErrors = ['Không đọc được tệp. Hãy chọn lại tệp CSV.'];
         renderProductImportPreview();
       };
@@ -2924,7 +2989,10 @@
   });
 
   backdrop.addEventListener('click', closeModal);
-  document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { closeModal(); const drawer = document.getElementById('drawer-cart'); if (drawer) drawer.classList.remove('open'); } });
+  document.addEventListener('keydown', function (event) {
+    keepModalFocus(event);
+    if (event.key === 'Escape') { closeModal(); const drawer = document.getElementById('drawer-cart'); if (drawer) drawer.classList.remove('open'); }
+  });
   document.addEventListener('click', function (event) { const drawer = document.getElementById('drawer-cart'); if (drawer && event.target === drawer) drawer.classList.remove('open'); });
   window.addEventListener('online', renderShell); window.addEventListener('offline', renderShell);
   boot();

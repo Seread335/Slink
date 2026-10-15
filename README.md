@@ -16,7 +16,7 @@ Các luồng này cần kiểm tra nghiệp vụ, dữ liệu và quyền truy c
 
 ## Chạy Slink trên máy phát triển
 
-Cần Node.js 24.11 trở lên và pnpm. Chạy `pnpm install`, sau đó `pnpm dev` và mở `http://127.0.0.1:3000`. Lệnh này khởi động giao diện, API và PostgreSQL nhúng PGlite; không cần cài dịch vụ PostgreSQL riêng. Dữ liệu được lưu tại `.local-data/pglite`, tồn tại sau khi đóng và mở lại ứng dụng. Không có dữ liệu bán hàng mẫu được nạp vào tài khoản.
+Cần Node.js 24.11 trở lên và pnpm 11.25.0. Tệp `.nvmrc` ghim Node 24.22.0 làm phiên bản chuẩn cho CI và ảnh triển khai. Chạy `pnpm install`, sau đó `pnpm dev` và mở `http://127.0.0.1:3000`. Lệnh này khởi động giao diện, API và PostgreSQL nhúng PGlite; không cần cài dịch vụ PostgreSQL riêng. Dữ liệu được lưu tại `.local-data/pglite`, tồn tại sau khi đóng và mở lại ứng dụng. Không có dữ liệu bán hàng mẫu được nạp vào tài khoản.
 
 Tạo tài khoản trên trang đăng ký. Trong chế độ phát triển, API trả liên kết xác nhận email để mở trực tiếp; email thật chưa được gửi. Có thể đặt `PORT`, `HOST`, `PUBLIC_ORIGIN` hoặc `SLINK_LOCAL_DATA_DIR` trong `.env` để đổi cổng, địa chỉ nghe, địa chỉ truy cập hoặc nơi lưu database. Nếu truy cập từ điện thoại cùng mạng, đặt `HOST=0.0.0.0` và `PUBLIC_ORIGIN` thành địa chỉ LAN của máy chạy Slink; cần HTTPS để kiểm tra cài PWA đúng như môi trường thực tế.
 
@@ -24,7 +24,7 @@ PGlite là runtime phát triển trên một máy, không phải database produc
 
 `node tools/serve.js` chỉ mở bản xem giao diện tại `http://127.0.0.1:4173`; bản xem này **không** có API hay lưu giao dịch. Không dùng nó làm máy chủ cho cửa hàng.
 
-Chi tiết thiết lập vai trò và dịch vụ email xem tại [`docs/BACKEND_SETUP.md`](docs/BACKEND_SETUP.md). Không đưa bí mật vào mã nguồn hoặc commit tệp `.env`.
+Chi tiết thiết lập vai trò và dịch vụ email xem tại [`docs/BACKEND_SETUP.md`](docs/BACKEND_SETUP.md). Quy trình tạo ảnh container và cổng triển khai ghi tại [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md); trạng thái tích hợp thương mại xem tại [`docs/COMMERCIAL_READINESS.md`](docs/COMMERCIAL_READINESS.md). Không đưa bí mật vào mã nguồn hoặc commit tệp `.env`.
 
 ## iPhone và Android
 

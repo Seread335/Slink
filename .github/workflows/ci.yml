@@ -17,7 +17,7 @@ concurrency:
 jobs:
   acceptance:
     name: API and schema acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out source
@@ -26,9 +26,24 @@ jobs:
       - name: Set up Node.js and pnpm
         uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
         with:
-          runtime: node@24.11.0
+          runtime: node@24.22.0
           require-lockfile: true
           cache: true
 
+      - name: Check operations tooling syntax
+        run: node --check scripts/postgres-backup.js
+
       - name: Run acceptance suite
         run: pnpm test
+
+  container:
+    name: Production container build
+    needs: acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build production image
+        run: docker build --pull --tag slink:ci-${{ github.sha }} .
